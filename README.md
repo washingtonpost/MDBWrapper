@@ -5,9 +5,7 @@ Apache2 MDBWrapper module
 ## To install automatically
 
 ```bash
-
-    apxs binaries/[your system]/libmodmdbwrapper.la
-
+apxs binaries/[your system]/libmodmdbwrapper.la
 ```
 
 
@@ -23,18 +21,14 @@ First, you need the following requirements:
 Configure
 
 ```bash
-
-    cd src
-    ./configure --with-apache=/path/to/apache2 --with-jsonc=/path/to/json-c --with-mongoc=/path/to/mongo-c
-
+cd src
+./configure --with-apache=/path/to/apache2 --with-jsonc=/path/to/json-c --with-mongoc=/path/to/mongo-c
 ```
 
 Make
 
 ```bash
-
-    make
-
+make
 ```
 
 Make creates a libmodmdbwrapper.la file. Follow the install instructions above to install automatically.
