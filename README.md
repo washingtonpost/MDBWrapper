@@ -11,11 +11,11 @@ apxs binaries/[your system]/libmodmdbwrapper.la
 
 ## To build
 
-First, you need the following requirements:
+First, you need the following requirements (versions listed are what the binaries in this repo are currently compiled with):
 
-* apache2 (http://httpd.apache.org/)
-* json-c (https://github.com/json-c/json-c)
-* mongo-c (https://github.com/mongodb/mongo-c-driver)
+* apache2 (http://httpd.apache.org/ [v2.4.4])
+* json-c (https://github.com/json-c/json-c [v0.11])
+* mongo-c (https://github.com/mongodb/mongo-c-driver [v0.7.1])
 
 
 Configure
