@@ -1,0 +1,27 @@
+ # Object files
+*.o
+
+# automake
+*.cache
+
+# Libraries
+*.libs
+*.a
+*.deps
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+*.lo
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Rubbish
+*.log
+*.m4
+
