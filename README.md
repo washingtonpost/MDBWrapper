@@ -2,7 +2,9 @@
 
 Apache2 MDBWrapper module
 
-## To install automatically
+## Install
+
+### Automatically
 
 ```bash
 apxs binaries/[your system]/libmodmdbwrapper.la
