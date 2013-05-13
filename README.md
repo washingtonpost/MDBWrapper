@@ -7,7 +7,7 @@ Apache2 MDBWrapper module
 ### Automatically
 
 ```bash
-apxs binaries/[your system]/libmodmdbwrapper.la
+sudo apxs -ian mdbwrapper binaries/[your system]/libmodmdbwrapper.la
 ```
 
 
