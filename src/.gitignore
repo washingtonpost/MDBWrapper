@@ -1,4 +1,9 @@
- # Object files
+# Build artifacts
+libtool
+Makefile
+config.status
+
+# Object files
 *.o
 
 # automake
