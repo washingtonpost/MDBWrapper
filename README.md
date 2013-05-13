@@ -24,12 +24,9 @@ Configure
 
 ```bash
 cd src
+
 ./configure --with-apache=/path/to/apache2 --with-jsonc=/path/to/json-c --with-mongoc=/path/to/mongo-c
-```
 
-Make
-
-```bash
 make
 ```
 
