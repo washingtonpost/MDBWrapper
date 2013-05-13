@@ -20,6 +20,7 @@ config.status
 *.so.*
 *.dylib
 *.lo
+*.la
 
 # Executables
 *.exe
