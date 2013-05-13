@@ -33,7 +33,7 @@ Make
 make
 ```
 
-Make creates a libmodmdbwrapper.la file. Follow the install instructions above to install automatically.
+`make` creates a `libmodmdbwrapper.la` file. Follow the install instructions above to install automatically.
 
 
 # LICENSE
