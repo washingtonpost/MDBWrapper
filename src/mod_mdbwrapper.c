@@ -126,7 +126,7 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
     break;
   }
   case json_type_string: {
-    const char * strFromJSON = json_object_get_string(val);
+    const char * const strFromJSON = json_object_get_string(val);
     const char * strVal = strFromJSON;
     if (*strVal == '/' && strVal++) while(*strVal != '\0' && *strVal != '/') strVal++;
     if (*strVal == '/') {
