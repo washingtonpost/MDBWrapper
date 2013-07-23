@@ -126,11 +126,15 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
     break;
   }
   case json_type_string: {
-    // if (regex) bson_append_regex (b, key, json_object_get_string (val),"");
-    const char* strVal = json_object_get_string(val); 
-    if (*strVal == '/') bson_append_regex (b, key, strVal,"i");
-    // else if (strVal == '/') bson_append_string (b, key, strVal);
-    else bson_append_string (b, key, json_object_get_string (val));
+    const char * strFromJSON = json_object_get_string(val);
+    const char * strVal = strFromJSON;
+    if (*strVal == '/' && strVal++) while(*strVal != '\0' && *strVal != '/') strVal++;
+    if (*strVal == '/') {
+      char * regex = (char*) apr_palloc(r->pool, strVal - strFromJSON - 1);
+      for (int i = 1; i < strVal - strFromJSON; i++) *(regex+i-1) = *(strFromJSON+i);
+      bson_append_regex(b, key, regex, ++strVal);
+    }
+    else bson_append_string (b, key, strFromJSON);
     break;
   }
   default:
