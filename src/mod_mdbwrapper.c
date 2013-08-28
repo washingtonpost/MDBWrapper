@@ -132,6 +132,7 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
     if (*strVal == '/') {
       char * regex = (char*) apr_palloc(r->pool, strVal - strFromJSON - 1);
       for (int i = 1; i < strVal - strFromJSON; i++) *(regex+i-1) = *(strFromJSON+i);
+      *(regex + (strVal - strFromJSON) - 1) = '\0';
       bson_append_regex(b, key, regex, ++strVal);
     }
     else bson_append_string (b, key, strFromJSON);
