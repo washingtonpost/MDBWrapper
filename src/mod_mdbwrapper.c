@@ -388,8 +388,8 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
   
   // If we didn't get any queryParams, create a default value of *.
   if (!queryParams) {
-    queryParams = apr_palloc(r->pool,2);
-    memcpy(queryParams,"*",1);
+    queryParams = apr_palloc( r->pool, 2 );
+    memcpy( queryParams,"*\0", 2 );
   }
 
 
