@@ -83,6 +83,18 @@ int replace_str(char *str, char *orig, char *rep)
   return 1;
 }
 
+static void append_oid(bson *b, void *val, const char *key) {
+  json_object * inner_val = json_object_object_get(val, "$oid");
+  if(!inner_val)
+    return;
+  const char * oid_str = json_object_get_string(inner_val);
+  if (!oid_str)
+    return;
+  bson_oid_t id_obj[1];
+  bson_oid_from_string(id_obj, oid_str);
+  bson_append_oid(b, key, id_obj);
+}
+
 /**
  * Appends the correct bson type to the passed in bson object: used during json parsing, called for each
  * individual key \ value pair.
@@ -107,6 +119,10 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
   case json_type_object: {
     // The json value type has recursive behavior - calling back to the json_to_bson function to parse
     // the values internal to the nested json.
+    if (strcmp("_id", key) == 0) {
+      append_oid(b, val, key);
+      break;
+    }
     bson *sub;
     sub = json_to_bson (val, r, regex);
     bson_append_bson(b,key,sub);
@@ -156,7 +172,7 @@ static bson * json_to_bson (struct json_object *json, request_rec *r, int regex)
   //Iterate over each value in the json, use json_key_to_bson_key to append the converted key\value pairs
   //to the bson we're building (loadBSON).
   json_object_object_foreachC(json, it)
-  json_key_to_bson_key (loadBson, it.val, it.key, r, regex);
+    json_key_to_bson_key (loadBson, it.val, it.key, r, regex);
   bson_finish (loadBson);
   return loadBson;
 }
@@ -367,11 +383,13 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
     else if (strcmp(key,"s") == 0)
       skip = atoi(val);
   }
+  
   // If we didn't get any queryParams, create a default value of *.
   if (!queryParams) {
-    queryParams = apr_palloc(r->pool,2);
-    memcpy(queryParams,"*",1);
+    char defaultQuery[] = "*";
+    queryParams = defaultQuery;
   }
+
   char *queries[20];
   int cp = 0;
   queries[0] = strtok(queryParams,"|");
@@ -411,9 +429,10 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
         rpl = replace_str(queries[ib],"%22","\"");
       rpl = 1;
       while(rpl)
-	rpl = replace_str(queries[ib],"%20"," ");
+        rpl = replace_str(queries[ib],"%20"," ");
       struct json_object *queryJSON = json_tokener_parse (queries[ib]);
-      if(queryJSON && json_object_is_type(queryJSON,json_type_object)) queryStr = json_to_bson(queryJSON,r,1);
+      if(queryJSON && json_object_is_type(queryJSON,json_type_object)) 
+        queryStr = json_to_bson(queryJSON,r,1);
       else {
         // If the filter we got was not wildcard and not a valid JSON - just ignore it.
         fprintf(stderr,"There was an error decoding the query JSON :: Ignoring the query \n");
@@ -486,7 +505,10 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
   char *args[100];
   int arg_params = -1;
   // Use strtok to tokenize the args over ampersand.
-  args[0] = strtok(r->args,"&");
+  if (r->args)
+    args[0] = strtok(r->args,"&");
+  else
+    args[0] = NULL;
   // Set up our uniqueKey char buffer in advance.
   if(args[0] != NULL) {
     arg_params++;
@@ -658,23 +680,35 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
     }
     // Extract the value of the unique key from the posted json.
     int ukf_cnt = 0;
+    bson_oid_t * doc_id = NULL;
     const char *findUniqueVal[20];
     for(int ik = 0; ik < uk_counter; ik++) {
       json_object *jsonUniqueKey = json_object_object_get(postJSON,uniqueKey[ik]);
       if (jsonUniqueKey) {
-        findUniqueVal[ik] = json_object_get_string(jsonUniqueKey);
-        if(findUniqueVal[ik])
-          ukf_cnt++;
+        if (!strcmp("_id",uniqueKey[ik])) {
+          json_object *id_unique_key = json_object_object_get(jsonUniqueKey,"$oid");
+          bson_oid_t id_obj[1];
+          bson_oid_from_string(id_obj, json_object_get_string(id_unique_key));
+          doc_id = id_obj;
+        }
+        else {
+          findUniqueVal[ik] = json_object_get_string(jsonUniqueKey);
+          if(findUniqueVal[ik])
+            ukf_cnt++;
+        }
       }
     }
     // If the unique key was not present in the posted json, no worries, just insert the doc & return with success.
-    if (ukf_cnt != uk_counter) continue;
+    if (ukf_cnt != uk_counter && !doc_id) continue;
     // Prepare the query & check the mongoDB collection for the key\value pair.
     bson query[1];
     mongo_cursor cursor[1];
     bson_init( query );
-    for (int iq = 0; iq < uk_counter; iq++)
+    for (int iq = 0; iq < ukf_cnt; iq++) 
       bson_append_string( query, uniqueKey[iq], findUniqueVal[iq] );
+    if (doc_id) {
+      bson_append_oid(query, "_id", doc_id);
+    }
     bson_finish( query );
     mongo_cursor_init( cursor, conn, db_collection );
     mongo_cursor_set_query( cursor, query );
@@ -684,7 +718,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
     	  result++;
     	  break;
       }
-      else
+      else 
     	  mongo_remove(conn, db_collection,&cursor->current, NULL);
     }
     // Done querying
