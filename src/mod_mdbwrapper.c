@@ -67,7 +67,7 @@ typedef struct {
 } mdbwrapper_config;
 
 // Declaration of function to handle json to bson object transformations (implemented below).
-static bson *json_to_bson (struct json_object *json, request_rec *r, int regex);
+static bson *json_to_bson (struct json_object *json, request_rec *r);
 
 
 int replace_str(char *str, char *orig, char *rep)
@@ -104,7 +104,7 @@ static void append_oid(bson *b, void *val, const char *key) {
  * @param r: The apache request (used for apr memory allocation).
  * @return void: Result is appended to passed in bson.
  */
-static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec *r, int regex) {
+static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec *r) {
   if (strspn("$",key))
     return;
   // Determine the type of the passed in value and call the correct bson_append function.
@@ -126,7 +126,7 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
         break;
       }
       bson *sub;
-      sub = json_to_bson (val, r, regex);
+      sub = json_to_bson (val, r);
       bson_append_bson(b,key,sub);
       bson_destroy (sub);
       break;
@@ -138,7 +138,7 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
       for (pos = 0; pos < json_object_array_length (val); pos++) {
         char kk[10];
         sprintf(kk,"%d",pos);
-        json_key_to_bson_key (b, json_object_array_get_idx (val, pos),kk,r,regex);
+        json_key_to_bson_key ( b, json_object_array_get_idx ( val, pos ), kk, r );
       }
       bson_append_finish_array (b);
       break;
@@ -167,14 +167,14 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
  * @param r: The apache request (used for apr memory allocation).
  * @return bson: The converted bson object.
  */
-static bson * json_to_bson (struct json_object *json, request_rec *r, int regex) {
+static bson * json_to_bson (struct json_object *json, request_rec *r) {
   bson *loadBson = apr_palloc(r->pool,sizeof(bson));
   bson_init (loadBson);
   struct json_object_iter it;
   //Iterate over each value in the json, use json_key_to_bson_key to append the converted key\value pairs
   //to the bson we're building (loadBSON).
   json_object_object_foreachC(json, it)
-    json_key_to_bson_key (loadBson, it.val, it.key, r, regex);
+    json_key_to_bson_key( loadBson, it.val, it.key, r );
   bson_finish (loadBson);
   return loadBson;
 }
@@ -294,7 +294,7 @@ static void output_bson_string_response(request_rec *r, const char *b_data , int
 static void insert_json_to_db(struct json_object *postJSON, mongo *conn,
                               char* db_collection, request_rec *r) {
   // Convert the json to a bson for use with the MongoDB C driver.
-  bson *b = json_to_bson(postJSON, r, 0);
+  bson *b = json_to_bson(postJSON, r);
   // Perform the insert operation.
   int status = mongo_insert( conn,db_collection , b, NULL );
   // Destroy the bson - we're done with it.
@@ -340,7 +340,7 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
                                         int arg_params) {
   // Connect to the mongo db.
   mongo conn[1];
-  int status = mongo_connect( conn, "127.0.0.1", 27017 );
+  int status = mongo_client( conn, "127.0.0.1", 27017 );
   // If we cannot create the connection, log an error, send back an error, close the db connection.
   if( status != MONGO_OK ) {
     switch ( conn->err ) {
@@ -435,7 +435,7 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
         rpl = replace_str(queries[ib],"%20"," ");
       struct json_object *queryJSON = json_tokener_parse (queries[ib]);
       if(queryJSON && json_object_is_type(queryJSON,json_type_object)) 
-        queryStr = json_to_bson(queryJSON,r,1);
+        queryStr = json_to_bson(queryJSON,r);
       else {
         // If the filter we got was not wildcard and not a valid JSON - just ignore it.
         fprintf(stderr,"There was an error decoding the query JSON :: Ignoring the query \n");
@@ -623,7 +623,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
   }
   // Initialize the mongoDB connection.
   mongo conn[1];
-  int status = mongo_connect( conn, "127.0.0.1", 27017 );
+  int status = mongo_client( conn, "127.0.0.1", 27017 );
   // If we cannot create the connection, log an error, send back an error, close the db connection.
   if( status != MONGO_OK ) {
     switch ( conn->err ) {
@@ -659,6 +659,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
       return OK;
     }
   }
+  
   // If we didn't have a unique key, no worries, just insert the document & return with success.
   if (uck_counter < 0) {
     insert_json_to_db(postJSON,conn,db_collection,r);
@@ -667,6 +668,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
       ap_rputs(")",r);
     return OK;
   }
+
   int result = 0;
   for(int ick = 0; ick < uck_counter; ick++) {
     char *uniqueKey[20];
@@ -682,36 +684,22 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
       }
     }
     // Extract the value of the unique key from the posted json.
-    int ukf_cnt = 0;
-    bson_oid_t * doc_id = NULL;
-    const char *findUniqueVal[20];
+    bson query[1];
+    bson_init( query );
+    int query_valid = 0;
     for(int ik = 0; ik < uk_counter; ik++) {
       json_object *jsonUniqueKey = json_object_object_get(postJSON,uniqueKey[ik]);
       if (jsonUniqueKey) {
-        if (!strcmp("_id",uniqueKey[ik])) {
-          json_object *id_unique_key = json_object_object_get(jsonUniqueKey,"$oid");
-          bson_oid_t id_obj[1];
-          bson_oid_from_string(id_obj, json_object_get_string(id_unique_key));
-          doc_id = id_obj;
-        }
-        else {
-          findUniqueVal[ik] = json_object_get_string(jsonUniqueKey);
-          if(findUniqueVal[ik])
-            ukf_cnt++;
-        }
+        json_key_to_bson_key( query, jsonUniqueKey, uniqueKey[ik], r );
+        query_valid = 1;
       }
     }
     // If the unique key was not present in the posted json, no worries, just insert the doc & return with success.
-    if (ukf_cnt != uk_counter && !doc_id) continue;
+    if (!query_valid) continue;
     // Prepare the query & check the mongoDB collection for the key\value pair.
-    bson query[1];
-    mongo_cursor cursor[1];
-    bson_init( query );
-    for (int iq = 0; iq < ukf_cnt; iq++) 
-      bson_append_string( query, uniqueKey[iq], findUniqueVal[iq] );
-    if (doc_id)
-      bson_append_oid(query, "_id", doc_id);
     bson_finish( query );
+    mongo_cursor cursor[1];
+
     mongo_cursor_init( cursor, conn, db_collection );
     mongo_cursor_set_query( cursor, query );
     // Count the results - if there is even one, break & fail on unique constraint.
