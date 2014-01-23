@@ -105,57 +105,59 @@ static void append_oid(bson *b, void *val, const char *key) {
  * @return void: Result is appended to passed in bson.
  */
 static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec *r, int regex) {
+  if (strspn("$",key))
+    return;
   // Determine the type of the passed in value and call the correct bson_append function.
   switch (json_object_get_type (val)) {
-  case json_type_boolean:
-    bson_append_bool (b, key, json_object_get_boolean (val));
-    break;
-  case json_type_double:
-    bson_append_double (b, key, json_object_get_double (val));
-    break;
-  case json_type_int:
-    bson_append_int (b, key, json_object_get_int (val));
-    break;
-  case json_type_object: {
-    // The json value type has recursive behavior - calling back to the json_to_bson function to parse
-    // the values internal to the nested json.
-    if (strcmp("_id", key) == 0) {
-      append_oid(b, val, key);
+    case json_type_boolean:
+      bson_append_bool (b, key, json_object_get_boolean (val));
+      break;
+    case json_type_double:
+      bson_append_double (b, key, json_object_get_double (val));
+      break;
+    case json_type_int:
+      bson_append_int (b, key, json_object_get_int (val));
+      break;
+    case json_type_object: {
+      // The json value type has recursive behavior - calling back to the json_to_bson function to parse
+      // the values internal to the nested json.
+      if (strcmp("_id", key) == 0) {
+        append_oid(b, val, key);
+        break;
+      }
+      bson *sub;
+      sub = json_to_bson (val, r, regex);
+      bson_append_bson(b,key,sub);
+      bson_destroy (sub);
       break;
     }
-    bson *sub;
-    sub = json_to_bson (val, r, regex);
-    bson_append_bson(b,key,sub);
-    bson_destroy (sub);
-    break;
-  }
-  case json_type_array: {
-    // To handle nested arrays.
-    int pos;
-    bson_append_start_array (b, key);
-    for (pos = 0; pos < json_object_array_length (val); pos++) {
-      char kk[10];
-      sprintf(kk,"%d",pos);
-      json_key_to_bson_key (b, json_object_array_get_idx (val, pos),kk,r,regex);
+    case json_type_array: {
+      // To handle nested arrays.
+      int pos;
+      bson_append_start_array (b, key);
+      for (pos = 0; pos < json_object_array_length (val); pos++) {
+        char kk[10];
+        sprintf(kk,"%d",pos);
+        json_key_to_bson_key (b, json_object_array_get_idx (val, pos),kk,r,regex);
+      }
+      bson_append_finish_array (b);
+      break;
     }
-    bson_append_finish_array (b);
-    break;
-  }
-  case json_type_string: {
-    const char * const strFromJSON = json_object_get_string(val);
-    const char * strVal = strFromJSON;
-    if (*strVal == '/' && strVal++) while(*strVal != '\0' && *strVal != '/') strVal++;
-    if (*strVal == '/') {
-      char * regex = (char*) apr_palloc(r->pool, strVal - strFromJSON - 1);
-      for (int i = 1; i < strVal - strFromJSON; i++) *(regex+i-1) = *(strFromJSON+i);
-      *(regex + (strVal - strFromJSON) - 1) = '\0';
-      bson_append_regex(b, key, regex, ++strVal);
+    case json_type_string: {
+      const char * const strFromJSON = json_object_get_string(val);
+      const char * strVal = strFromJSON;
+      if (*strVal == '/' && strVal++) while(*strVal != '\0' && *strVal != '/') strVal++;
+      if (*strVal == '/') {
+        char * regex = (char*) apr_palloc(r->pool, strVal - strFromJSON - 1);
+        for (int i = 1; i < strVal - strFromJSON; i++) *(regex+i-1) = *(strFromJSON+i);
+        *(regex + (strVal - strFromJSON) - 1) = '\0';
+        bson_append_regex(b, key, regex, ++strVal);
+      }
+      else bson_append_string (b, key, strFromJSON);
+      break;
     }
-    else bson_append_string (b, key, strFromJSON);
-    break;
-  }
-  default:
-    break;
+    default:
+      break;
   }
 }
 
@@ -386,9 +388,10 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
   
   // If we didn't get any queryParams, create a default value of *.
   if (!queryParams) {
-    char defaultQuery[] = "*";
-    queryParams = defaultQuery;
+    queryParams = apr_palloc(r->pool,2);
+    memcpy(queryParams,"*",1);
   }
+
 
   char *queries[20];
   int cp = 0;
@@ -706,9 +709,8 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
     bson_init( query );
     for (int iq = 0; iq < ukf_cnt; iq++) 
       bson_append_string( query, uniqueKey[iq], findUniqueVal[iq] );
-    if (doc_id) {
+    if (doc_id)
       bson_append_oid(query, "_id", doc_id);
-    }
     bson_finish( query );
     mongo_cursor_init( cursor, conn, db_collection );
     mongo_cursor_set_query( cursor, query );
