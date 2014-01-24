@@ -45,6 +45,7 @@
 #include "http_protocol.h"
 #include "mongo.h"
 #include "json.h"
+#include "http_log.h"
 
 // Module declares itself.
 module AP_MODULE_DECLARE_DATA mdbwrapper_module;
@@ -115,9 +116,13 @@ static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec
     case json_type_double:
       bson_append_double (b, key, json_object_get_double (val));
       break;
-    case json_type_int:
-      bson_append_int (b, key, json_object_get_int (val));
+    case json_type_int: {
+      if (json_object_get_int64(val) > INT32_MAX)
+        bson_append_long (b, key, json_object_get_int64 (val));
+      else
+        bson_append_int (b, key, json_object_get_int64 (val));
       break;
+    }
     case json_type_object: {
       // The json value type has recursive behavior - calling back to the json_to_bson function to parse
       // the values internal to the nested json.
@@ -224,19 +229,7 @@ static void output_bson_string_response(request_rec *r, const char *b_data , int
         outStr = apr_palloc(r->pool,strlen(bson_iterator_string(&i)) + 1);
         memcpy(outStr,bson_iterator_string( &i ),strlen(bson_iterator_string(&i)) + 1);
       }
-      int repl;
-      do {
-        repl = replace_str(outStr,"\"","__%22__");
-      } while(repl);
-      do {
-        repl = replace_str(outStr,"__%22__","\\\"");
-      } while(repl);
-      do {
-        repl = replace_str(outStr,"\n","\\n");
-      } while(repl);
-      do {
-        repl = replace_str(outStr,"\r","\\r");
-      } while(repl);
+      ap_escape_html(r->pool, outStr);
       ap_rprintf(r, "\"%s\"" , outStr );
       break;
     }
@@ -250,7 +243,7 @@ static void output_bson_string_response(request_rec *r, const char *b_data , int
       ap_rprintf(r, "%d" , bson_iterator_int( &i ) );
       break;
     case BSON_LONG:
-      ap_rprintf(r, "%lld" , ( long long int )bson_iterator_long( &i ));
+      ap_rprintf(r, "%ld" , ( long int )bson_iterator_long( &i ));
       break;
     case BSON_OBJECT:
       output_bson_string_response(r, bson_iterator_value( &i ) , 0 );
@@ -304,6 +297,7 @@ static void insert_json_to_db(struct json_object *postJSON, mongo *conn,
     ap_rputs("{\"ok\":false,\"reason\":\"Error inserting into the database.\"}",r);
     //Destory the connection - we don't need it anymore - return.
     mongo_destroy(conn);
+    return;
   }
   //Split the db & collection into two separate char arrays for mongo_count function.
   char *dbc[2];
@@ -427,12 +421,7 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
     bson *queryStr = apr_palloc(r->pool,sizeof(bson));
     // If the value is wildcard, we shouldn't try to serialize it into a bson.
     if(strcmp(queries[ib],"*") != 0) {
-      int rpl = 1;
-      while(rpl)
-        rpl = replace_str(queries[ib],"%22","\"");
-      rpl = 1;
-      while(rpl)
-        rpl = replace_str(queries[ib],"%20"," ");
+      ap_unescape_url(queries[ib]);
       struct json_object *queryJSON = json_tokener_parse (queries[ib]);
       if(queryJSON && json_object_is_type(queryJSON,json_type_object)) 
         queryStr = json_to_bson(queryJSON,r);
