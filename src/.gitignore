@@ -10,6 +10,10 @@ depcomp
 install-sh
 missing
 ltmain.sh
+NEWS
+README
+AUTHORS
+ChangeLog
 
 # Object files
 *.o
