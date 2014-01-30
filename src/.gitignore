@@ -1,6 +1,7 @@
 # Build artifacts
 libtool
 Makefile
+Makefile.in
 config.status
 config.guess
 config.sub
