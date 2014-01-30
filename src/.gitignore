@@ -2,6 +2,14 @@
 libtool
 Makefile
 config.status
+config.guess
+config.sub
+configure.scan
+configure
+depcomp
+install-sh
+missing
+ltmain.sh
 
 # Object files
 *.o
