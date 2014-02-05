@@ -1,6 +1,7 @@
 # Build artifacts
 libtool
 Makefile
+Makefile.in
 config.status
 config.guess
 config.sub
@@ -14,6 +15,8 @@ NEWS
 README
 AUTHORS
 ChangeLog
+COPYING
+INSTALL
 
 # Object files
 *.o
