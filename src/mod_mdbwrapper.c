@@ -233,6 +233,19 @@ static void output_bson_string_response(request_rec *r, const char *b_data , int
         memcpy(outStr,bson_iterator_string( &i ),strlen(bson_iterator_string(&i)) + 1);
       }
       ap_escape_html(r->pool, outStr);
+      int repl;
+      do {
+        repl = replace_str(outStr,"\"","__%22__");
+      } while(repl);
+      do {
+        repl = replace_str(outStr,"__%22__","\\\"");
+      } while(repl);
+      do {
+        repl = replace_str(outStr,"\n","\\n");
+      } while(repl);
+      do {
+        repl = replace_str(outStr,"\r","\\r");
+      } while(repl);
       ap_rprintf(r, "\"%s\"" , outStr );
       break;
     }
