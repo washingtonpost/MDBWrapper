@@ -1,7 +1,20 @@
 # Build artifacts
 libtool
 Makefile
+Makefile.in
 config.status
+config.guess
+config.sub
+configure.scan
+configure
+depcomp
+install-sh
+missing
+ltmain.sh
+NEWS
+README
+AUTHORS
+ChangeLog
 
 # Object files
 *.o

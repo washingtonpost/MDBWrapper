@@ -106,8 +106,11 @@ static void append_oid(bson *b, void *val, const char *key) {
  * @return void: Result is appended to passed in bson.
  */
 static void json_key_to_bson_key (bson *b, void *val,const char *key,request_rec *r) {
-  if (strspn("$",key))
+  // Because the mongo C driver currently doesn't drop out invalid keys in an insert,
+  // We have to destroy the k: v pair during a POST completely.
+  if (strspn("$",key) && r->method_number == M_POST)
     return;
+
   // Determine the type of the passed in value and call the correct bson_append function.
   switch (json_object_get_type (val)) {
     case json_type_boolean:
@@ -392,7 +395,7 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
     else if (strcmp(key,"s") == 0)
       skip = atoi(val);
   }
-  
+
   // If we didn't get any queryParams, create a default value of *.
   if (!queryParams) {
     queryParams = apr_palloc( r->pool, 2 );
@@ -436,7 +439,7 @@ static void perform_get_request_handler(request_rec *r, char *db_collection,
     if(strcmp(queries[ib],"*") != 0) {
       ap_unescape_url(queries[ib]);
       struct json_object *queryJSON = json_tokener_parse (queries[ib]);
-      if(queryJSON && json_object_is_type(queryJSON,json_type_object)) 
+      if(queryJSON && json_object_is_type(queryJSON,json_type_object))
         queryStr = json_to_bson(queryJSON,r);
       else {
         // If the filter we got was not wildcard and not a valid JSON - just ignore it.
@@ -661,7 +664,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
       return OK;
     }
   }
-  
+
   // If we didn't have a unique key, no worries, just insert the document & return with success.
   if (uck_counter < 0) {
     insert_json_to_db(postJSON,conn,db_collection,r);
@@ -710,7 +713,7 @@ static int mod_mdbwrapper_method_handler (request_rec *r) {
     	  result++;
     	  break;
       }
-      else 
+      else
     	  mongo_remove(conn, db_collection,&cursor->current, NULL);
     }
     // Done querying
